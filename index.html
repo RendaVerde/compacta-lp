@@ -400,8 +400,8 @@
         <span class="section-label">PRÉ-ATENDIMENTO</span>
         <h2 id="leadDialogTitle">Vamos entender seu perfil.</h2>
         <p>
-          São quatro informações rápidas. Depois, você continua diretamente no
-          WhatsApp.
+          Preencha os dados essenciais para o especialista iniciar a conversa
+          entendendo o que você procura.
         </p>
       </div>
 
@@ -424,7 +424,18 @@
             />
           </label>
           <label>
-            <span>Sua cidade</span>
+            <span>Seu e-mail</span>
+            <input
+              id="leadEmail"
+              name="email"
+              type="email"
+              autocomplete="email"
+              placeholder="voce@email.com"
+              required
+            />
+          </label>
+          <label>
+            <span>Sua cidade / UF</span>
             <input
               id="leadCity"
               name="city"
@@ -434,7 +445,7 @@
           </label>
           <label>
             <span>O que você busca?</span>
-            <select id="leadProfile" name="profile" required>
+            <select id="leadObjective" name="objective" required>
               <option value="">Selecione</option>
               <option value="Renda complementar">Renda complementar</option>
               <option value="Nova atividade profissional">
@@ -446,6 +457,16 @@
               <option value="Construir uma equipe comercial">
                 Construir uma equipe comercial
               </option>
+            </select>
+          </label>
+          <label>
+            <span>Qual é o seu perfil hoje?</span>
+            <select id="leadProfile" name="profile" required>
+              <option value="">Selecione</option>
+              <option value="Já vendo ou empreendo">Já vendo ou empreendo</option>
+              <option value="Tenho boa rede de contatos">Tenho boa rede de contatos</option>
+              <option value="Quero aprender vendas">Quero aprender vendas</option>
+              <option value="Estou começando do zero">Estou começando do zero</option>
             </select>
           </label>
         </div>

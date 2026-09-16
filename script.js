@@ -3,7 +3,7 @@ const CONFIG = {
   sheetEndpoint:
     "https://script.google.com/macros/s/AKfycbwrCkcX0mvzbihwCQVqYVoKgnTStFOPb6qkco_47DFNLrP6o1LMoOjErDqX5LyYGgH45Q/exec",
   sheetSiteId: "rendaverde-igreen",
-  landingVersion: "compacta_instigante_v3",
+  landingVersion: "compacta_triagem_v4",
 };
 
 const leadDialog = document.querySelector("#leadDialog");
@@ -39,8 +39,11 @@ if (typeof window.clarity === "function") {
 function identifyEntryPoint(button) {
   if (button.closest(".nav")) return "navigation";
   if (button.closest(".hero")) return "hero";
-  if (button.closest(".reason")) return "opportunity";
+  if (button.closest(".ecosystem")) return "ecosystem";
+  if (button.closest(".path")) return "operation";
+  if (button.closest(".proof")) return "proof";
   if (button.closest(".offer")) return "offer";
+  if (button.closest(".objections")) return "faq";
   if (button.closest(".closing")) return "closing";
   if (button.closest(".mobile-cta")) return "mobile_sticky";
   return "unknown";
@@ -118,39 +121,55 @@ function getTrackingData() {
 }
 
 async function saveLeadToSheet(data) {
-  if (!CONFIG.sheetEndpoint) return false;
-
-  const formData = new URLSearchParams();
-  formData.set(
-    "payload",
-    JSON.stringify({
-      site_id: CONFIG.sheetSiteId,
-      ...data,
-    }),
-  );
-
-  if (navigator.sendBeacon?.(CONFIG.sheetEndpoint, formData)) {
-    return true;
+  if (!CONFIG.sheetEndpoint) {
+    console.warn("Google Sheets endpoint não configurado.");
+    return false;
   }
 
+  const payload = {
+    site_id: CONFIG.sheetSiteId,
+    ...data,
+  };
+  const formData = new URLSearchParams();
+  formData.set("payload", JSON.stringify(payload));
+
+  if (navigator.sendBeacon) {
+    try {
+      if (navigator.sendBeacon(CONFIG.sheetEndpoint, formData)) return true;
+    } catch (error) {
+      console.warn("Beacon indisponível; tentando POST:", error);
+    }
+  }
+
+  const controller =
+    typeof AbortController !== "undefined" ? new AbortController() : null;
+  const timeout = controller
+    ? window.setTimeout(() => controller.abort(), 8000)
+    : null;
   try {
-    await fetch(CONFIG.sheetEndpoint, {
+    const response = await fetch(CONFIG.sheetEndpoint, {
       method: "POST",
       mode: "no-cors",
       body: formData,
       keepalive: true,
+      ...(controller ? { signal: controller.signal } : {}),
     });
+    if (response.type !== "opaque" && !response.ok) return false;
     return true;
   } catch (error) {
     console.error("Falha ao registrar o pré-atendimento:", error);
     return false;
+  } finally {
+    if (timeout !== null) window.clearTimeout(timeout);
   }
 }
 
 function validateLead() {
   const name = document.querySelector("#leadName").value.trim();
   const phone = phoneInput.value.replace(/\D/g, "");
+  const email = document.querySelector("#leadEmail").value.trim();
   const city = document.querySelector("#leadCity").value.trim();
+  const objective = document.querySelector("#leadObjective").value;
   const profile = document.querySelector("#leadProfile").value;
   const consent = document.querySelector("#leadConsent").checked;
 
@@ -158,17 +177,24 @@ function validateLead() {
   if (phone.length < 10 || phone.length > 13) {
     return "Informe um WhatsApp válido, com DDD.";
   }
-  if (city.length < 2) return "Informe sua cidade para continuar.";
-  if (!profile) return "Selecione o que você busca neste momento.";
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return "Informe um e-mail válido para continuar.";
+  }
+  if (city.length < 2) return "Informe sua cidade e estado para continuar.";
+  if (!objective) return "Selecione o que você busca neste momento.";
+  if (!profile) return "Selecione o perfil que mais combina com você.";
   if (!consent) return "Autorize o contato para iniciar o atendimento.";
 
   return "";
 }
 
-function createWhatsappUrl({ name, city, profile }) {
+function createWhatsappUrl({ name, email, city, objective, profile }) {
   const message = [
     `Olá! Meu nome é ${name}, sou de ${city}.`,
-    `Quero entender se a licença Connect Full faz sentido para o meu perfil (${profile}).`,
+    `E-mail: ${email}.`,
+    `Busco: ${objective}.`,
+    `Meu perfil atual: ${profile}.`,
+    "Quero entender se a licença Connect Full faz sentido para mim.",
     "Vim pela página de pré-atendimento.",
   ].join(" ");
 
@@ -183,38 +209,48 @@ leadForm.addEventListener("submit", async (event) => {
 
   const submitButton = leadForm.querySelector("button[type='submit']");
   const name = document.querySelector("#leadName").value.trim();
-  const whatsapp = phoneInput.value.replace(/\D/g, "");
+  const whatsapp = phoneInput.value.trim();
+  const email = document.querySelector("#leadEmail").value.trim();
   const city = document.querySelector("#leadCity").value.trim();
+  const objective = document.querySelector("#leadObjective").value;
   const profile = document.querySelector("#leadProfile").value;
 
   submitButton.disabled = true;
   submitButton.textContent = "ABRINDO ATENDIMENTO…";
 
   const lead = {
+    tipo: "licenciado",
     lead_id: createLeadId(),
-    lead_type: "licenciado",
-    destination: "whatsapp",
-    source: CONFIG.landingVersion,
     nome: name,
     whatsapp,
+    email,
     cidade: city,
+    objetivo: objective,
     perfil: profile,
-    entry_point: entryPoint,
-    created_at: new Date().toISOString(),
+    momento: "Quer conhecer antes de decidir",
+    rota_resultado: `LP compacta (${entryPoint}) → WhatsApp`,
     ...getTrackingData(),
   };
 
   trackEvent("lead_atendimento_enviado", {
     entry_point: entryPoint,
+    objective,
     profile,
   });
 
-  await Promise.race([
-    saveLeadToSheet(lead),
-    new Promise((resolve) => window.setTimeout(resolve, 450)),
-  ]);
+  const leadSaved = await saveLeadToSheet(lead);
+  trackEvent(leadSaved ? "lead_envio_aceito" : "lead_envio_falhou", {
+    lead_type: "licenciado",
+    entry_point: entryPoint,
+  });
 
-  window.location.href = createWhatsappUrl({ name, city, profile });
+  window.location.href = createWhatsappUrl({
+    name,
+    email,
+    city,
+    objective,
+    profile,
+  });
 });
 
 function updateMobileCta() {
@@ -257,3 +293,4 @@ conversionObserver.observe(closing);
 window.addEventListener("resize", updateMobileCta);
 
 document.querySelector("#currentYear").textContent = new Date().getFullYear();
+
